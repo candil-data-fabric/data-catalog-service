@@ -122,7 +122,8 @@ g_init.add((
     DCTERMS.conformsTo,
     URIRef("https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf")
 ))
-logger.info(g_init.serialize(format='turtle'))
+
+kafka_producer = Producer(conf)
 kafka_producer.produce(
     topic=KAFKA_TOPIC, key=str(uuid4()),
     value=g_init.serialize(format='turtle'),

@@ -16,7 +16,7 @@ curl --location 'http://localhost:80/dataProducts' \
     "https://w3id.org/aerOS/building#Desk"
   ],
   "mappings": [
-    "urn:ACME:Mapping:TM101"
+    "urn:ACME:TriplesMap:TM101"
   ]
 }'
 
