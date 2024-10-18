@@ -1,0 +1,65 @@
+services:
+  data-catalog-service:
+    image: data-catalog-service
+    hostname: data-catalog-service
+    container_name: data-catalog-service
+    command: dev --host 0.0.0.0 --port 80
+    ports:
+      - 80:80
+    environment:
+      KAFKA_BROKER: kafka:9092
+      KAFKA_TOPIC: knowledge-graphs
+      CONTEXT_BROKER_URL: orion-ld:1026
+    volumes:
+      - ../data_catalog_service:/app/data_catalog_service
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 2181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  rdf-to-ngsi-ld:
+    image: registry.gitlab.aeros-project.eu/aeros-public/common-deployments/data-fabric/rdf-to-ngsi-ld:latest
+    hostname: rdf-to-ngsi-ld
+    container_name: rdf-to-ngsi-ld
+    volumes:
+      - ./rdf-to-ngsi-ld/config.cfg:/opt/aeros/rdf-to-ngsi-ld/config.cfg
+    depends_on:
+      - kafka
+
+  mongo:
+    image: mongo:4.4
+    command: --nojournal
+    volumes:
+        - mongo-db:/data/db
+
+  orion-ld:
+    image: fiware/orion-ld:1.6.0
+    platform: linux/x86_64
+    links:
+      - mongo
+    ports:
+      - 1026:1026
+    command: -dbhost mongo -brokerId Domain03 -forwarding -t 0-255 -logLevel DEBUG
+
+
+volumes:
+  mongo-db: ~
