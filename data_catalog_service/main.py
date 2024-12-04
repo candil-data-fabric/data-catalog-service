@@ -23,12 +23,14 @@ logger.addHandler(stream_handler)
 
 # STARTUP ENV VARIABLES
 CONTEXT_BROKER_URL = os.getenv("CONTEXT_BROKER_URL", "context-broker-1:8080")
-DOMAIN_URI = os.getenv("DOMAIN_URI", "urn:ACME:Domain:default")
-ORGANIZATION_URI = os.getenv("ORGANIZATION_URI", "urn:ACME")
+ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "NCSRD")
+ORGANIZATION_URI = "urn:Organization:" + ORGANIZATION_ID
+DOMAIN_ID = os.getenv("DOMAIN_ID", "Default")
+DOMAIN_URI = "urn:Organization:" + ORGANIZATION_ID + ":Domain:" + DOMAIN_ID
 
 # RDF TO NGSI-LD Translation
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "knowledge-graphs")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "rdf-stream")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", None)
 
 # RDF NAMESPACES
@@ -52,7 +54,7 @@ def delivery_report(errmsg, msg):
     """
     if errmsg is not None:
         logger.error("Delivery failed for Message: {} : {}".format(msg.key(), errmsg))
-        return
+        raise Exception
     logger.debug('Message: {} successfully produced to Topic: {} Partition: [{}] at offset {}'.format(
         msg.key(), msg.topic(), msg.partition(), msg.offset()))
 
@@ -74,7 +76,7 @@ class CreateDataProduct(BaseModel):
         description="Description of the data product."
     )
     owner: str = Field(
-        description="URI that identifies the owner of the data product."
+        description="aerOS username that identifies the owner of the data product."
     )
     keywords: list[str] = Field(
         default=None,
@@ -84,9 +86,9 @@ class CreateDataProduct(BaseModel):
         description="List of URIs identiftying concepts associated with the data product. "
                     "These concepts must be captured in existing ontologies."
     )
-    mappings: list[str] = Field(
+    mapping: str = Field(
         default=None,
-        description="(Optional) List of URIs that identify the RML mappings used for the creation of"
+        description="(Optional) URI that identifies the RML mapping used for the creation of"
                     "the data product, i.e., TripleMapping. "
                     "Only applies to data products where raw data have been transformed into RDF."
     )
@@ -98,20 +100,23 @@ g_init = Graph()
 g_init.bind("aerdcat", AERDCAT)
 g_init.bind("aeros", AEROS)
 
+# Init organization node
+organization = URIRef(ORGANIZATION_URI)
+
 # Init domain node
 domain = URIRef(DOMAIN_URI)
 
-# Create Data Catalog
-catalog = URIRef(DOMAIN_URI + ":" + "DataCatalog")
+# Create catalog at the domain level
+catalog = URIRef(DOMAIN_URI + ":" + "Catalog")
 g_init.add((catalog, RDF.type, DCAT.Catalog))
 g_init.add((catalog, AEROS.domain, domain))
 
-# Create Business Glossary and link it to Data Catalog
+# Create Business Glossary and link it to catalog
 glossary = URIRef(DOMAIN_URI + ":"+ "BusinessGlossary")
 g_init.add((glossary, RDF.type, SKOS.ConceptScheme))
 g_init.add((catalog, DCAT.themeTaxonomy, glossary))
 
-# Create Context Broker and link it to Data Catalog
+# Create Context Broker and link it to catalog
 cb = URIRef(DOMAIN_URI + ":" + "ContextBroker")
 g_init.add((cb, RDF.type, AERDCAT.ContextBroker))
 g_init.add((catalog, AERDCAT.contextBroker, cb))
@@ -148,11 +153,13 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     # Data Product
     dp = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + urllib.parse.quote(create_dp.name))
     g.add((dp, RDF.type, AERDCAT.DataProduct))
-    g.add((dp, DCTERMS.identifier, Literal(create_dp.name)))
+    dp_id = create_dp.name.replace(" ","_")
+    g.add((dp, DCTERMS.identifier, Literal(dp_id)))
     g.add((dp, DCTERMS.description, Literal(create_dp.description)))
-    # Owner
-    owner = URIRef(create_dp.owner)
-    g.add((dp, DCTERMS.publisher, owner))
+    # Ownership
+    owner_user = URIRef("urn:User:" + create_dp.owner)
+    g.add((dp, DCTERMS.publisher, owner_user))
+    g.add((dp, DCTERMS.publisher, organization))
     # Keywords
     if create_dp.keywords:
         for keyword in create_dp.keywords:
@@ -164,7 +171,8 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
         g.add((term, SKOS.inScheme, glossary))
         g.add((dp, DCAT.theme, term))
     # Distribution
-    distribution = URIRef(DOMAIN_URI + ":" + "Distribution" + ":" + urllib.parse.quote(create_dp.name))
+    distribution = URIRef(
+        DOMAIN_URI + ":" + "DataProduct" + ":" + urllib.parse.quote(create_dp.name) + ":" + "Distribution")
     g.add((distribution, RDF.type, DCAT.Distribution))
     g.add((distribution, DCAT.accessURL, URIRef(CONTEXT_BROKER_URL)))
     g.add((
@@ -174,16 +182,13 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     ))
     # Link data product to distribution
     g.add((dp, DCAT.distribution, distribution))
-    # Link distribution to context broker
+    # Link distribution to context broker (data service)
     g.add((distribution, DCAT.accessService, cb))
-    # Link data service to data product
+    # Link context broker (data service) to serve data product
     g.add((cb, AERDCAT.servesDataProduct, dp))
-    # Mappings
-    if create_dp.mappings:
-        for mapping_uri in create_dp.mappings:
-            mapping = URIRef(mapping_uri)
-            g.add((dp, AERDCAT.mapping, mapping))
-    # Link DP to Data Catalog
+    # Mapping
+    g.add((dp, AERDCAT.mapping, URIRef(create_dp.mapping)))
+    # Register data product in data catalog
     g.add((catalog, AERDCAT.dataProduct, dp))
     # Sending RDF data to Kafka for NGSI-LD translation
     kafka_producer.produce(
