@@ -86,12 +86,6 @@ class CreateDataProduct(BaseModel):
         description="List of URIs identiftying concepts associated with the data product. "
                     "These concepts must be captured in existing ontologies."
     )
-    mapping: str = Field(
-        default=None,
-        description="(Optional) URI that identifies the RML mapping used for the creation of"
-                    "the data product, i.e., TripleMapping. "
-                    "Only applies to data products where raw data have been transformed into RDF."
-    )
 
 ## -- BEGIN MAIN CODE -- ##
 
@@ -186,8 +180,6 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     g.add((distribution, DCAT.accessService, cb))
     # Link context broker (data service) to serve data product
     g.add((cb, AERDCAT.servesDataProduct, dp))
-    # Mapping
-    g.add((dp, AERDCAT.mapping, URIRef(create_dp.mapping)))
     # Register data product in data catalog
     g.add((catalog, AERDCAT.dataProduct, dp))
     # Sending RDF data to Kafka for NGSI-LD translation
