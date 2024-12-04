@@ -1,0 +1,78 @@
+# Use root/example as user/password credentials
+
+services:
+  data_catalog_service:
+    image: data-catalog-service
+    container_name: data-catalog-service
+    environment:
+      CONTEXT_BROKER_URL: "orion:8080"
+      DOMAIN_ID: "Default"
+      KAFKA_BROKER: "kafka:29092"
+      ORGANIZATION_ID: "NCSRD"
+    ports:
+      - "80:80"
+    depends_on:
+      - kafka
+
+  zookeeper:
+    image: 'confluentinc/cp-zookeeper:7.5.0'
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: 'confluentinc/cp-kafka:7.5.0'
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"    # For external access
+      - "29092:29092"  # For access from other Docker containers
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--list", "--bootstrap-server", "kafka:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7.0.12
+    volumes:
+        - mongo-orion-domain:/data/db
+    restart: always
+  orion:
+    image: registry.gitlab.aeros-project.eu/aeros-public/common-deployments/orion-ld:1.1.1
+    links:
+      - mongo
+    ports:
+      - "1026:1026"
+    command: -dbhost mongo -mongocOnly -brokerId broker01 -forwarding -wip entityMaps,distSubs -t 70-99 -logLevel DEBUG -disableFileLog -noArrayReduction -subordinateEndpoint http://<machine-ip>:1026/ngsi-ld/ex/v1 -socketService
+    restart: always
+
+  rdf-to-ngsi-ld:
+    image: registry.gitlab.aeros-project.eu/aeros-public/common-deployments/data-fabric/rdf-to-ngsi-ld:latest
+    hostname: rdf-to-ngsi-ld
+    container_name: rdf-to-ngsi-ld
+    restart: always
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./rdf-to-ngsi-ld/config.cfg:/opt/aeros/rdf-to-ngsi-ld/config.cfg
+
+
+
+volumes:
+  mongo-db:
+  mongodb_data:
+  mongo-orion-domain:
