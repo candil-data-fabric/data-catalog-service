@@ -3,69 +3,35 @@ __version__ = "1.0.0"
 
 import logging
 import os
-import socket
 import sys
-import urllib.parse
-from uuid import uuid4
+from contextlib import asynccontextmanager
+from typing import Optional
 
-from confluent_kafka import KafkaException, Producer
 from fastapi import Body, FastAPI
 from pydantic import BaseModel, Field
+from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCAT, DCTERMS, SKOS
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 stream_handler = logging.StreamHandler(sys.stdout)
 log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 stream_handler.setFormatter(log_formatter)
 logger.addHandler(stream_handler)
 
 # STARTUP ENV VARIABLES
-CONTEXT_BROKER_URL = os.getenv("CONTEXT_BROKER_URL", "context-broker-1:8080")
+CONTEXT_BROKER_URL = os.getenv(
+    "CONTEXT_BROKER_URL",
+    "http://localhost:1026/ngsi-ld/v1")
 ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "NCSRD")
 ORGANIZATION_URI = "urn:Organization:" + ORGANIZATION_ID
 DOMAIN_ID = os.getenv("DOMAIN_ID", "Default")
 DOMAIN_URI = "urn:Organization:" + ORGANIZATION_ID + ":Domain:" + DOMAIN_ID
 
-# RDF TO NGSI-LD Translation
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "rdf-stream")
-KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", None)
-
 # RDF NAMESPACES
 AERDCAT = Namespace("https://w3id.org/aerOS/data-catalog#")
 AEROS = Namespace("https://w3id.org/aerOS/continuum#")
-
-# Kafka Producer Callback
-def delivery_report(errmsg, msg):
-    """
-    Reports the Failure or Success of a message delivery.
-    Args:
-        errmsg (KafkaError): The Error that occurred while message producing.
-        msg (Actual message): The message that was produced.
-    Note:
-        In the delivery report callback the Message.key() and Message.value()
-        will be the binary format as encoded by any configured Serializers and
-        not the same object that was passed to produce().
-        If you wish to pass the original object(s) for key and value to delivery
-        report callback we recommend a bound callback or lambda where you pass
-        the objects along.
-    """
-    if errmsg is not None:
-        logger.error("Delivery failed for Message: {} : {}".format(msg.key(), errmsg))
-        raise Exception
-    logger.debug('Message: {} successfully produced to Topic: {} Partition: [{}] at offset {}'.format(
-        msg.key(), msg.topic(), msg.partition(), msg.offset()))
-
-# Connect to Kafka
-conf = {'bootstrap.servers': KAFKA_BROKER,
-        'client.id': socket.gethostname()}
-logger.info("Subscribing to Kafka topic {0}...".format(KAFKA_TOPIC))
-try:
-    kafka_producer = Producer(conf)
-except KafkaException as e:
-    logger.warning(f'Exception:{e}')
 
 class CreateDataProduct(BaseModel):
     name: str = Field(
@@ -78,7 +44,7 @@ class CreateDataProduct(BaseModel):
     owner: str = Field(
         description="aerOS username that identifies the owner of the data product."
     )
-    keywords: list[str] = Field(
+    keywords: Optional[list[str]] = Field(
         default=None,
         description="(Optional) List of custom keywords/tags that identify the data product."
     )
@@ -89,65 +55,66 @@ class CreateDataProduct(BaseModel):
 
 ## -- BEGIN MAIN CODE -- ##
 
-# Init graph
-g_init = Graph()
-g_init.bind("aerdcat", AERDCAT)
-g_init.bind("aeros", AEROS)
 
-# Init organization node
+# Init graph
+core_graph = Graph()
+core_graph.bind("aerdcat", AERDCAT)
+core_graph.bind("aeros", AEROS)
+
+# Init global subjects
+domain = URIRef(DOMAIN_URI)
+catalog = URIRef(DOMAIN_URI + ":" + "Catalog")
+cb = URIRef(DOMAIN_URI + ":" + "ContextBroker")
+glossary = URIRef(DOMAIN_URI + ":"+ "BusinessGlossary")
 organization = URIRef(ORGANIZATION_URI)
 
-# Init domain node
-domain = URIRef(DOMAIN_URI)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global core_graph
+    # Create catalog at the domain level
+    core_graph.add((catalog, RDF.type, DCAT.Catalog))
+    core_graph.add((catalog, AEROS.domain, domain))
 
-# Create catalog at the domain level
-catalog = URIRef(DOMAIN_URI + ":" + "Catalog")
-g_init.add((catalog, RDF.type, DCAT.Catalog))
-g_init.add((catalog, AEROS.domain, domain))
+    # Create Business Glossary and link it to catalog
+    core_graph.add((glossary, RDF.type, SKOS.ConceptScheme))
+    core_graph.add((catalog, DCAT.themeTaxonomy, glossary))
 
-# Create Business Glossary and link it to catalog
-glossary = URIRef(DOMAIN_URI + ":"+ "BusinessGlossary")
-g_init.add((glossary, RDF.type, SKOS.ConceptScheme))
-g_init.add((catalog, DCAT.themeTaxonomy, glossary))
+    # Create Context Broker and link it to catalog
+    core_graph.add((cb, RDF.type, AERDCAT.ContextBroker))
+    core_graph.add((catalog, AERDCAT.contextBroker, cb))
+    core_graph.add((cb, AEROS.domain, domain))
+    core_graph.add((cb, DCAT.endpointURL, URIRef(CONTEXT_BROKER_URL)))
+    core_graph.add((
+        cb,
+        DCTERMS.conformsTo,
+        URIRef("https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf")
+    ))
+    # Sending RDF data to serializer for NGSI-LD translation
+    entities = serializer(core_graph)
+    send_to_context_broker(entities, CONTEXT_BROKER_URL, False)
 
-# Create Context Broker and link it to catalog
-cb = URIRef(DOMAIN_URI + ":" + "ContextBroker")
-g_init.add((cb, RDF.type, AERDCAT.ContextBroker))
-g_init.add((catalog, AERDCAT.contextBroker, cb))
-g_init.add((cb, AEROS.domain, domain))
-g_init.add((cb, DCAT.endpointURL, URIRef(CONTEXT_BROKER_URL)))
-g_init.add((
-    cb,
-    DCTERMS.conformsTo,
-    URIRef("https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf")
-))
-
-kafka_producer = Producer(conf)
-kafka_producer.produce(
-    topic=KAFKA_TOPIC, key=str(uuid4()),
-    value=g_init.serialize(format='turtle'),
-    on_delivery=delivery_report
-)
-kafka_producer.poll(1)
+    yield
 
 # Start FastAPI server:
 app = FastAPI(
     title=__name__ + " - REST API",
-    version=__version__
+    version=__version__,
+    lifespan=lifespan
 )
 
 @app.post(
         path="/dataProducts",
         description="Registration of a data product in the data catalog.")
 async def register_data_product(create_dp: CreateDataProduct = Body(...)):
+    global core_graph
     # Init graph
     g = Graph()
     g.bind("aerdcat", AERDCAT)
     g.bind("aeros", AEROS)
     # Data Product
-    dp = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + urllib.parse.quote(create_dp.name))
-    g.add((dp, RDF.type, AERDCAT.DataProduct))
     dp_id = create_dp.name.replace(" ","_")
+    dp = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id)
+    g.add((dp, RDF.type, AERDCAT.DataProduct))
     g.add((dp, DCTERMS.identifier, Literal(dp_id)))
     g.add((dp, DCTERMS.description, Literal(create_dp.description)))
     # Ownership
@@ -166,7 +133,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
         g.add((dp, DCAT.theme, term))
     # Distribution
     distribution = URIRef(
-        DOMAIN_URI + ":" + "DataProduct" + ":" + urllib.parse.quote(create_dp.name) + ":" + "Distribution")
+        DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id + ":" + "Distribution")
     g.add((distribution, RDF.type, DCAT.Distribution))
     g.add((distribution, DCAT.accessURL, URIRef(CONTEXT_BROKER_URL)))
     g.add((
@@ -178,17 +145,21 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     g.add((dp, DCAT.distribution, distribution))
     # Link distribution to context broker (data service)
     g.add((distribution, DCAT.accessService, cb))
-    # Link context broker (data service) to serve data product
+    # Add domain's context broker (data service) and link to the new data product
+    for s, p, o in core_graph.triples((cb, AERDCAT.servesDataProduct, None)):
+        g.add((s, p, o))
     g.add((cb, AERDCAT.servesDataProduct, dp))
-    # Register data product in data catalog
+    g.add((cb, RDF.type, AERDCAT.ContextBroker))
+    # Add domain's catalog and register data product
+    for s, p, o in core_graph.triples((catalog, AERDCAT.dataProduct, None)):
+        g.add((s, p, o))
     g.add((catalog, AERDCAT.dataProduct, dp))
-    # Sending RDF data to Kafka for NGSI-LD translation
-    kafka_producer.produce(
-        topic=KAFKA_TOPIC, key=str(uuid4()),
-        value=g.serialize(format='turtle'),
-        on_delivery=delivery_report
-    )
-    kafka_producer.poll(1)
+    g.add((catalog, RDF.type, DCAT.Catalog))
+    # Store request graph in core_graph
+    core_graph = core_graph + g
+    # Sending RDF data to serializer for NGSI-LD translation
+    entities = serializer(g)
+    send_to_context_broker(entities, CONTEXT_BROKER_URL, False)
     return dp
 
 ## -- END MAIN CODE -- ##
