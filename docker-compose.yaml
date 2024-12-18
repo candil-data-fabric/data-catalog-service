@@ -1,0 +1,30 @@
+# Use root/example as user/password credentials
+
+services:
+  data_catalog_service:
+    image: data-catalog-service
+    container_name: data-catalog-service
+    environment:
+      CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
+      DOMAIN_ID: "Default"
+      ORGANIZATION_ID: "NCSRD"
+    ports:
+      - "8000:80"
+    depends_on:
+      - orion
+  mongo:
+    image: mongo:7.0.12
+    volumes:
+        - mongo-orion-domain:/data/db
+    restart: always
+  orion:
+    image: registry.gitlab.aeros-project.eu/aeros-public/common-deployments/orion-ld:1.1.1
+    links:
+      - mongo
+    ports:
+      - "1026:1026"
+    command: -dbhost mongo -mongocOnly -brokerId domainA -forwarding -wip entityMaps,distSubs -t 70-99 -logLevel DEBUG -disableFileLog -noArrayReduction -socketService
+    restart: always
+volumes:
+  mongo-orion-domain:
+
