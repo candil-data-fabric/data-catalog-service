@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "data-catalog-service"
-version = "1.0.1"
+version = "1.0.2"
 description = ""
 authors = ["Ignacio Dominguez Martinez-Casanueva <ignacio.dominguezmartinez@telefonica.com>"]
 readme = "README.md"
@@ -10,7 +10,7 @@ python = "^3.10"
 fastapi = {extras = ["standard"], version = "^0.115.0"}
 uvicorn = {extras = ["standard"], version = "^0.23.2"}
 rdflib = "^7.0.0"
-rdf-to-ngsi-ld = {git = "https://github.com/candil-data-fabric/rdf-to-ngsi-ld.git", tag = "1.2.1"}
+rdf-to-ngsi-ld = {git = "https://github.com/candil-data-fabric/rdf-to-ngsi-ld.git", tag = "1.2.2"}
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^6.1.0"
