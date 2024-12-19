@@ -87,7 +87,7 @@ async def lifespan(app: FastAPI):
     core_graph.add((
         cb,
         DCTERMS.conformsTo,
-        URIRef("https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf")
+        URIRef("https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.06.01_60/gs_CIM009v010601p.pdf")
     ))
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(core_graph)
