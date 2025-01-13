@@ -13,13 +13,6 @@ from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCAT, DCTERMS, SKOS
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-stream_handler = logging.StreamHandler(sys.stdout)
-log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-stream_handler.setFormatter(log_formatter)
-logger.addHandler(stream_handler)
-
 # STARTUP ENV VARIABLES
 INTERNAL_CONTEXT_BROKER_URL = os.getenv(
     "INTERNAL_CONTEXT_BROKER_URL",
@@ -35,6 +28,16 @@ DOMAIN_URI = "urn:Organization:" + ORGANIZATION_ID + ":Domain:" + DOMAIN_ID
 # RDF NAMESPACES
 AERDCAT = Namespace("https://w3id.org/aerOS/data-catalog#")
 AEROS = Namespace("https://w3id.org/aerOS/continuum#")
+
+# Logging
+LOGLEVEL = os.getenv('LOGLEVEL', 'INFO').upper()
+
+logger = logging.getLogger(__name__)
+logger.setLevel(LOGLEVEL)
+stream_handler = logging.StreamHandler(sys.stdout)
+log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+stream_handler.setFormatter(log_formatter)
+logger.addHandler(stream_handler)
 
 class CreateDataProduct(BaseModel):
     name: str = Field(
@@ -94,7 +97,10 @@ async def lifespan(app: FastAPI):
     ))
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(core_graph)
-    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, False)
+    debug = False
+    if LOGLEVEL == "DEBUG":
+        debug = True
+    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
 
     yield
 
@@ -162,7 +168,9 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     core_graph = core_graph + g
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(g)
-    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, False)
+    if LOGLEVEL == "DEBUG":
+        debug = True
+    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
     return dp
 
 ## -- END MAIN CODE -- ##
