@@ -8,7 +8,8 @@ services:
       INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
       PUBLIC_CONTEXT_BROKER_URL: "http://api-gw:1026/ngsi-ld/v1"
       DOMAIN_ID: "Default"
-      ORGANIZATION_ID: "NCSRD"
+      ORGANIZATION_ID: "CANDIL"
+      LOGLEVEL: "DEBUG"
     ports:
       - "8000:80"
     depends_on:
