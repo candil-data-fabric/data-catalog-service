@@ -21,9 +21,12 @@ stream_handler.setFormatter(log_formatter)
 logger.addHandler(stream_handler)
 
 # STARTUP ENV VARIABLES
-CONTEXT_BROKER_URL = os.getenv(
-    "CONTEXT_BROKER_URL",
+INTERNAL_CONTEXT_BROKER_URL = os.getenv(
+    "INTERNAL_CONTEXT_BROKER_URL",
     "http://localhost:1026/ngsi-ld/v1")
+PUBLIC_CONTEXT_BROKER_URL = os.getenv(
+    "PUBLIC_CONTEXT_BROKER_URL",
+    "http://orion-ld:1026/ngsi-ld/v1")
 ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "NCSRD")
 ORGANIZATION_URI = "urn:Organization:" + ORGANIZATION_ID
 DOMAIN_ID = os.getenv("DOMAIN_ID", "Default")
@@ -83,7 +86,7 @@ async def lifespan(app: FastAPI):
     core_graph.add((cb, RDF.type, AERDCAT.ContextBroker))
     core_graph.add((catalog, AERDCAT.contextBroker, cb))
     core_graph.add((cb, AEROS.domain, domain))
-    core_graph.add((cb, DCAT.endpointURL, URIRef(CONTEXT_BROKER_URL)))
+    core_graph.add((cb, DCAT.endpointURL, URIRef(PUBLIC_CONTEXT_BROKER_URL)))
     core_graph.add((
         cb,
         DCTERMS.conformsTo,
@@ -91,7 +94,7 @@ async def lifespan(app: FastAPI):
     ))
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(core_graph)
-    send_to_context_broker(entities, CONTEXT_BROKER_URL, False)
+    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, False)
 
     yield
 
@@ -135,7 +138,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     distribution = URIRef(
         DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id + ":" + "Distribution")
     g.add((distribution, RDF.type, DCAT.Distribution))
-    g.add((distribution, DCAT.accessURL, URIRef(CONTEXT_BROKER_URL)))
+    g.add((distribution, DCAT.accessURL, URIRef(PUBLIC_CONTEXT_BROKER_URL)))
     g.add((
         distribution,
         DCAT.mediaType,
@@ -159,7 +162,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     core_graph = core_graph + g
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(g)
-    send_to_context_broker(entities, CONTEXT_BROKER_URL, False)
+    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, False)
     return dp
 
 ## -- END MAIN CODE -- ##

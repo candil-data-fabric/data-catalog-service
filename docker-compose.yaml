@@ -5,7 +5,8 @@ services:
     image: data-catalog-service
     container_name: data-catalog-service
     environment:
-      CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
+      INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
+      PUBLIC_CONTEXT_BROKER_URL: "http://api-gw:1026/ngsi-ld/v1"
       DOMAIN_ID: "Default"
       ORGANIZATION_ID: "NCSRD"
     ports:
