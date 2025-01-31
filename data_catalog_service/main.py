@@ -1,5 +1,5 @@
 __name__ = "Data Catalog Service"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 import logging
 import os
@@ -7,7 +7,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, status
 from pydantic import BaseModel, Field
 from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
@@ -61,7 +61,6 @@ class CreateDataProduct(BaseModel):
 
 ## -- BEGIN MAIN CODE -- ##
 
-
 # Init graph
 core_graph = Graph()
 core_graph.bind("aerdcat", AERDCAT)
@@ -114,7 +113,7 @@ app = FastAPI(
 @app.post(
         path="/dataProducts",
         description="Registration of a data product in the data catalog.")
-async def register_data_product(create_dp: CreateDataProduct = Body(...)):
+async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> URIRef:
     global core_graph
     # Init graph
     g = Graph()
@@ -168,6 +167,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)):
     core_graph = core_graph + g
     # Sending RDF data to serializer for NGSI-LD translation
     entities = serializer(g)
+    debug = False
     if LOGLEVEL == "DEBUG":
         debug = True
     send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
