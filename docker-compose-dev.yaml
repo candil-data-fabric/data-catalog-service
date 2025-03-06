@@ -2,16 +2,19 @@
 
 services:
   data_catalog_service:
-    image: ghcr.io/candil-data-fabric/data-catalog-service
+    image: data-catalog-service
     container_name: data-catalog-service
     environment:
       INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
       PUBLIC_CONTEXT_BROKER_URL: "http://api-gw:1026/ngsi-ld/v1"
       DOMAIN_ID: "NCSRD"
       ORGANIZATION_ID: "NCSRD"
-      LOGLEVEL: "INFO"
+      LOGLEVEL: "DEBUG"
+    command: "dev --host 0.0.0.0 --port 80"
     ports:
-      - "8000:80"
+      - 8000:80
+    volumes:
+      - ./data_catalog_service:/app/data_catalog_service
     depends_on:
       - orion
   mongo:
