@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 import requests
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
@@ -22,9 +22,9 @@ PUBLIC_CONTEXT_BROKER_URL = os.getenv(
     "PUBLIC_CONTEXT_BROKER_URL",
     "http://orion-ld:1026/ngsi-ld/v1")
 ORGANIZATION_ID = os.getenv("ORGANIZATION_ID", "NCSRD")
-ORGANIZATION_URI = "urn:Organization:" + ORGANIZATION_ID
+ORGANIZATION_URI = "urn:ngsi-ld:Organization:" + ORGANIZATION_ID
 DOMAIN_ID = os.getenv("DOMAIN_ID", "Default")
-DOMAIN_URI = "urn:Organization:" + ORGANIZATION_ID + ":Domain:" + DOMAIN_ID
+DOMAIN_URI = "urn:ngsi-ld:Domain:" + DOMAIN_ID
 
 # RDF NAMESPACES
 AERDCAT = Namespace("https://w3id.org/aerOS/data-catalog#")
@@ -40,6 +40,9 @@ log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 stream_handler.setFormatter(log_formatter)
 logger.addHandler(stream_handler)
 
+# Util method to check if a subject does not have a predicate
+def subject_has_no_relationship(graph, subject, predicate):
+    return next(graph.triples((subject, predicate, None)), None) is None
 class CreateDataProduct(BaseModel):
     id: str = Field(
         description="Unique identifer of the data product in the data catalog."
@@ -71,9 +74,18 @@ core_graph.bind("aeros", AEROS)
 
 # Init global subjects
 domain = URIRef(DOMAIN_URI)
-catalog = URIRef(DOMAIN_URI + ":" + "Catalog")
-cb = URIRef(DOMAIN_URI + ":" + "ContextBroker")
-glossary = URIRef(DOMAIN_URI + ":"+ "BusinessGlossary")
+catalog = URIRef(
+    ORGANIZATION_URI + ":Domain:" +
+    DOMAIN_ID + ":Catalog"
+)
+cb = URIRef(
+    ORGANIZATION_URI + ":Domain:" +
+    DOMAIN_ID + ":ContextBroker"
+)
+glossary = URIRef(
+    ORGANIZATION_URI + ":Domain:" +
+    DOMAIN_ID + ":BusinessGlossary"
+)
 organization = URIRef(ORGANIZATION_URI)
 
 @asynccontextmanager
@@ -124,9 +136,19 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
     g.bind("aeros", AEROS)
     # Data Product
     dp_id = create_dp.id
-    dp = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id)
+    dp = URIRef(
+        ORGANIZATION_URI + ":Domain:" +
+        DOMAIN_ID + ":DataProduct:" + dp_id
+    )
+    response = requests.get(
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ dp
+    )
+    if response.status_code != 404:
+        raise HTTPException(
+            status_code=409, detail="Data Product already exists")
     g.add((dp, RDF.type, AERDCAT.DataProduct))
-    g.add((dp, DCTERMS.identifier, Literal(dp_id)))
+    g.add((dp, DCTERMS.identifier, Literal(create_dp.id)))
+    g.add((dp, DCTERMS.title, Literal(create_dp.name)))
     g.add((dp, DCTERMS.description, Literal(create_dp.description)))
     # Ownership
     owner_user = URIRef("urn:User:" + create_dp.owner)
@@ -144,7 +166,10 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
         g.add((dp, DCAT.theme, term))
     # Distribution
     distribution = URIRef(
-        DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id + ":" + "Distribution")
+        ORGANIZATION_URI + ":Domain:" +
+        DOMAIN_ID + ":DataProduct:" + dp_id +
+        ":" + "Distribution"
+    )
     g.add((distribution, RDF.type, DCAT.Distribution))
     g.add((distribution, DCAT.accessURL, URIRef(PUBLIC_CONTEXT_BROKER_URL)))
     g.add((
@@ -169,12 +194,13 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
     # Store request graph in core_graph
     core_graph = core_graph + g
     # Sending RDF data to serializer for NGSI-LD translation
+    print(core_graph.serialize(format="turtle"))
     entities = serializer(g)
     debug = False
     if LOGLEVEL == "DEBUG":
         debug = True
     send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
-    return dp
+    return dp_id
 
 @app.delete(
         path="/dataProducts/{dp_id}",
@@ -183,28 +209,44 @@ async def delete_data_product(dp_id: str):
     global core_graph
     g = core_graph
     # Delete DP from graph and in NGSI-LD
-    dp_uri = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id)
-    dp_subject = URIRef(dp_uri)
-    g.remove((dp_subject, None, None))
+    dp = URIRef(
+        ORGANIZATION_URI + ":Domain:" +
+        DOMAIN_ID + ":DataProduct:" + dp_id
+    )
+    response = requests.get(
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ dp
+    )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=404, detail="Data product not found")
+    g.remove((dp, None, None))
     response = requests.delete(
-        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ dp_uri
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ dp
     )
     # Delete Distribution from graph and in NGSI-LD
-    distribution_uri = URIRef(
-        DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id + ":" + "Distribution")
-    distribution_subject = URIRef(distribution_uri)
-    g.remove((distribution_subject, None, None))
+    distribution = URIRef(
+        ORGANIZATION_URI + ":Domain:" +
+        DOMAIN_ID + ":DataProduct:" + dp_id +
+        ":" + "Distribution"
+    )
+    g.remove((distribution, None, None))
     response = requests.delete(
-        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ distribution_uri
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ distribution
     )
     # Then update servesDataProduct and dataProduct relationships must be updated
     # both in the in-memory RDF graph and then to update NGSI-LD entities
-    g.remove((cb, AERDCAT.servesDataProduct, dp_uri))
-    g.remove((catalog, AERDCAT.dataProduct, dp_uri))
+    g.remove((cb, AERDCAT.servesDataProduct, dp))
+    g.remove((catalog, AERDCAT.dataProduct, dp))
     # Store request graph in core_graph
     core_graph = g
+    # Separate graph for update (fix to delete relationship)
+    local_graph = Graph()
+    local_graph = local_graph + g
+    if subject_has_no_relationship(g, cb, AERDCAT.servesDataProduct):
+        local_graph.add((cb, AERDCAT.servesDataProduct, Literal("urn:ngsi-ld:null")))
+        local_graph.add((catalog, AERDCAT.dataProduct, Literal("urn:ngsi-ld:null")))
     # Sending RDF data to serializer for NGSI-LD translation
-    entities = serializer(g)
+    entities = serializer(local_graph)
     debug = False
     if LOGLEVEL == "DEBUG":
         debug = True
