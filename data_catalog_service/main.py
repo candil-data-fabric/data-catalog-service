@@ -7,6 +7,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import requests
 from fastapi import Body, FastAPI
 from pydantic import BaseModel, Field
 from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
@@ -40,9 +41,11 @@ stream_handler.setFormatter(log_formatter)
 logger.addHandler(stream_handler)
 
 class CreateDataProduct(BaseModel):
+    id: str = Field(
+        description="Unique identifer of the data product in the data catalog."
+    )
     name: str = Field(
-        description="Name of the data product. "
-                    "This will uniquely identify the data product in the data catalog."
+        description="Name of the data product."
     )
     description: str = Field(
         description="Description of the data product."
@@ -120,7 +123,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
     g.bind("aerdcat", AERDCAT)
     g.bind("aeros", AEROS)
     # Data Product
-    dp_id = create_dp.name.replace(" ","_")
+    dp_id = create_dp.id
     dp = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id)
     g.add((dp, RDF.type, AERDCAT.DataProduct))
     g.add((dp, DCTERMS.identifier, Literal(dp_id)))
@@ -172,5 +175,39 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
         debug = True
     send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
     return dp
+
+@app.delete(
+        path="/dataProducts/{dp_id}",
+        description="Deletion of a data product in the data catalog.")
+async def delete_data_product(dp_id: str):
+    global core_graph
+    g = core_graph
+    # Delete DP from graph and in NGSI-LD
+    dp_uri = URIRef(DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id)
+    dp_subject = URIRef(dp_uri)
+    g.remove((dp_subject, None, None))
+    response = requests.delete(
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ dp_uri
+    )
+    # Delete Distribution from graph and in NGSI-LD
+    distribution_uri = URIRef(
+        DOMAIN_URI + ":" + "DataProduct" + ":" + dp_id + ":" + "Distribution")
+    distribution_subject = URIRef(distribution_uri)
+    g.remove((distribution_subject, None, None))
+    response = requests.delete(
+        INTERNAL_CONTEXT_BROKER_URL + "/entities/"+ distribution_uri
+    )
+    # Then update servesDataProduct and dataProduct relationships must be updated
+    # both in the in-memory RDF graph and then to update NGSI-LD entities
+    g.remove((cb, AERDCAT.servesDataProduct, dp_uri))
+    g.remove((catalog, AERDCAT.dataProduct, dp_uri))
+    # Store request graph in core_graph
+    core_graph = g
+    # Sending RDF data to serializer for NGSI-LD translation
+    entities = serializer(g)
+    debug = False
+    if LOGLEVEL == "DEBUG":
+        debug = True
+    send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
 
 ## -- END MAIN CODE -- ##

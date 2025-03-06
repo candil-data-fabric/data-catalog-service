@@ -2,7 +2,7 @@
 
 services:
   data_catalog_service:
-    image: ghcr.io/candil-data-fabric/data-catalog-service
+    image: data-catalog-service
     container_name: data-catalog-service
     environment:
       INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
