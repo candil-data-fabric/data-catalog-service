@@ -1,1 +1,193 @@
-{"openapi":"3.1.0","info":{"title":"Data Catalog Service - REST API","version":"1.1.2"},"paths":{"/dataProducts":{"post":{"summary":"Register Data Product","description":"Registration of a data product in the data catalog.","operationId":"register_data_product_dataProducts_post","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateDataProduct"}}},"required":true},"responses":{"200":{"description":"Successful Response","content":{"application/json":{"schema":{"type":"string","title":"Response Register Data Product Dataproducts Post"}}}},"422":{"description":"Validation Error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HTTPValidationError"}}}}}}}},"components":{"schemas":{"CreateDataProduct":{"properties":{"name":{"type":"string","title":"Name","description":"Name of the data product. This will uniquely identify the data product in the data catalog."},"description":{"type":"string","title":"Description","description":"Description of the data product."},"owner":{"type":"string","title":"Owner","description":"aerOS username that identifies the owner of the data product."},"keywords":{"anyOf":[{"items":{"type":"string"},"type":"array"},{"type":"null"}],"title":"Keywords","description":"(Optional) List of custom keywords/tags that identify the data product."},"glossary_terms":{"items":{"type":"string"},"type":"array","title":"Glossary Terms","description":"List of URIs identiftying concepts associated with the data product. These concepts must be captured in existing ontologies."}},"type":"object","required":["name","description","owner","glossary_terms"],"title":"CreateDataProduct"},"HTTPValidationError":{"properties":{"detail":{"items":{"$ref":"#/components/schemas/ValidationError"},"type":"array","title":"Detail"}},"type":"object","title":"HTTPValidationError"},"ValidationError":{"properties":{"loc":{"items":{"anyOf":[{"type":"string"},{"type":"integer"}]},"type":"array","title":"Location"},"msg":{"type":"string","title":"Message"},"type":{"type":"string","title":"Error Type"}},"type":"object","required":["loc","msg","type"],"title":"ValidationError"}}}}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Data Catalog Service - REST API",
+    "version": "1.3.0"
+  },
+  "paths": {
+    "/dataProducts": {
+      "post": {
+        "summary": "Register Data Product",
+        "description": "Registration of a data product in the data catalog.",
+        "operationId": "register_data_product_dataProducts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDataProduct"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Register Data Product Dataproducts Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dataProducts/{dp_id}": {
+      "delete": {
+        "summary": "Delete Data Product",
+        "description": "Deletion of a data product in the data catalog.",
+        "operationId": "delete_data_product_dataProducts__dp_id__delete",
+        "parameters": [
+          {
+            "name": "dp_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dp Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateDataProduct": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique identifer of the data product in the data catalog."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Name of the data product."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Description of the data product."
+          },
+          "owner": {
+            "type": "string",
+            "title": "Owner",
+            "description": "aerOS username that identifies the owner of the data product."
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords",
+            "description": "(Optional) List of custom keywords/tags that identify the data product."
+          },
+          "glossary_terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Glossary Terms",
+            "description": "List of URIs identiftying concepts associated with the data product. These concepts must be captured in existing ontologies."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "owner",
+          "glossary_terms"
+        ],
+        "title": "CreateDataProduct"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
