@@ -194,8 +194,10 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
     # Store request graph in core_graph
     core_graph = core_graph + g
     # Sending RDF data to serializer for NGSI-LD translation
-    print(core_graph.serialize(format="turtle"))
-    entities = serializer(g)
+    entities = serializer( g,
+        [str(AERDCAT.servesDataProduct),
+        str(DCAT.keyword), str(AERDCAT.dataProduct), str(DCAT.theme)]
+    )
     debug = False
     if LOGLEVEL == "DEBUG":
         debug = True
@@ -242,11 +244,29 @@ async def delete_data_product(dp_id: str):
     # Separate graph for update (fix to delete relationship)
     local_graph = Graph()
     local_graph = local_graph + g
+    entities = []
     if subject_has_no_relationship(g, cb, AERDCAT.servesDataProduct):
-        local_graph.add((cb, AERDCAT.servesDataProduct, Literal("urn:ngsi-ld:null")))
-        local_graph.add((catalog, AERDCAT.dataProduct, Literal("urn:ngsi-ld:null")))
-    # Sending RDF data to serializer for NGSI-LD translation
-    entities = serializer(local_graph)
+        local_graph.add((cb, AERDCAT.servesDataProduct, URIRef("urn:ngsi-ld:null")))
+        local_graph.add((catalog, AERDCAT.dataProduct, URIRef("urn:ngsi-ld:null")))
+        # Send
+        entities = serializer(
+            local_graph,
+            [
+                str(DCAT.keyword),
+                str(DCAT.theme)
+            ]
+        )
+    else:
+        # Sending RDF data to serializer for NGSI-LD translation
+        entities = serializer(
+            local_graph,
+            [
+                str(AERDCAT.servesDataProduct),
+                str(DCAT.keyword),
+                str(AERDCAT.dataProduct),
+                str(DCAT.theme)
+            ]
+        )
     debug = False
     if LOGLEVEL == "DEBUG":
         debug = True
