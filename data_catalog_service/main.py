@@ -1,5 +1,5 @@
 __name__ = "Data Catalog Service"
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 import logging
 import os
