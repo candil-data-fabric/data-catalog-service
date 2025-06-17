@@ -51,3 +51,11 @@ curl --location 'http://localhost:8000/dataProducts' \
   ]
 }'
 ```
+
+## Acknowledgements
+
+This work was partially supported by the following projects:
+
+- **UNICO 5G I+D 6G-DATADRIVEN**: Redes de próxima generación (B5G y 6G) impulsadas por datos para la fabricación sostenible y la respuesta a emergencias. Ministerio de Asuntos Económicos y Transformación Digital. European Union NextGenerationEU.
+
+![UNICO](./images/ack-logo.png)
