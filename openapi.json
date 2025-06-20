@@ -8,7 +8,7 @@
     "/dataProducts": {
       "post": {
         "summary": "Register Data Product",
-        "description": "Registration of a data product in the data catalog.",
+        "description": "Registration of a data product in the Data Catalog.",
         "operationId": "register_data_product_dataProducts_post",
         "requestBody": {
           "content": {
@@ -48,7 +48,7 @@
     "/dataProducts/{dp_id}": {
       "delete": {
         "summary": "Delete Data Product",
-        "description": "Deletion of a data product in the data catalog.",
+        "description": "Deletion of a data product in the Data Catalog.",
         "operationId": "delete_data_product_dataProducts__dp_id__delete",
         "parameters": [
           {

@@ -102,7 +102,9 @@ def subject_has_no_relationship(graph: Graph, subject, predicate) -> bool:
 def check_if_graph_exists_in_mongodb(graph_id: str) -> bool:
     '''
     Checks if the RDF graph which ID is passed as a parameter exists in MongoDB.
-    The RDF graph is stored in JSON-LD format.
+    The document saved in MongoDB is a dictionary that consists of the following key/values:
+    - "_id": ID of the RDF graph (string).
+    - "@graph": JSON-LD representation of the RDF graph (string).
     '''
 
     count = mongodb_collection.count_documents({"_id": graph_id})
@@ -115,6 +117,9 @@ def get_graph_from_mongodb(graph_id: str) -> Graph:
     '''
     Returns the RDF graph object which JSON-LD representation is stored in
     MongoDB and which ID is passed as a parameter.
+    The document saved in MongoDB is a dictionary that consists of the following key/values:
+    - "_id": ID of the RDF graph (string).
+    - "@graph": JSON-LD representation of the RDF graph (string).
     '''
 
     logger.info("Retrieving RDF graph from MongoDB...")
@@ -126,7 +131,7 @@ def get_graph_from_mongodb(graph_id: str) -> Graph:
 def write_graph_to_mongodb(graph_id: str, graph: Graph) -> None:
     '''
     Serializes the RDF graph object to JSON-LD format and saves it into MongoDB.
-    The document saved into MongoDB is a dictionary that consists of the following key/values:
+    The document saved in MongoDB is a dictionary that consists of the following key/values:
     - "_id": ID of the RDF graph (string).
     - "@graph": JSON-LD representation of the RDF graph (string).
     '''
