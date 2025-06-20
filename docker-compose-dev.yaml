@@ -7,9 +7,10 @@ services:
     environment:
       INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
       PUBLIC_CONTEXT_BROKER_URL: "http://api-gw:1026/ngsi-ld/v1"
-      DOMAIN_ID: "NCSRD"
-      ORGANIZATION_ID: "NCSRD"
+      DOMAIN_ID: "CANDIL"
+      ORGANIZATION_ID: "CANDIL"
       LOGLEVEL: "DEBUG"
+      MONGO_DB_URI: "mongodb://mongo:27017"
     command: "dev --host 0.0.0.0 --port 80"
     ports:
       - 8000:80
@@ -21,6 +22,8 @@ services:
     image: mongo:7.0.12
     volumes:
         - mongo-orion-domain:/data/db
+    ports:
+      - "27017:27017"
     restart: always
   orion:
     image: registry.gitlab.aeros-project.eu/aeros-public/common-deployments/orion-ld:1.1.1
@@ -32,4 +35,3 @@ services:
     restart: always
 volumes:
   mongo-orion-domain:
-

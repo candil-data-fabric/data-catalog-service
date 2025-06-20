@@ -1,7 +1,4 @@
-
-
 ```bash
-
 curl --location 'http://localhost:80/dataProducts' \
 --header 'Content-Type: application/json' \
 --data '{
@@ -19,5 +16,4 @@ curl --location 'http://localhost:80/dataProducts' \
     "urn:ACME:TriplesMap:TM101"
   ]
 }'
-
 ```
