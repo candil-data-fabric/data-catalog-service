@@ -91,7 +91,7 @@
           "id": {
             "type": "string",
             "title": "Id",
-            "description": "Unique identifer of the data product in the data catalog."
+            "description": "Unique identifer of the data product in the Data Catalog."
           },
           "name": {
             "type": "string",

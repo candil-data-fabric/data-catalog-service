@@ -25,8 +25,6 @@ import pymongo
 from rdf_to_ngsi_ld.translator import send_to_context_broker, serializer
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import DCAT, DCTERMS, SKOS
-from rdflib.plugins.parsers.jsonld import JsonLDParser
-from rdflib.plugins.serializers.jsonld import JsonLDSerializer
 import requests
 import sys
 from typing import Optional
@@ -104,8 +102,10 @@ def check_if_graph_exists_in_mongodb(graph_id: str) -> bool:
     Checks if the RDF graph which ID is passed as a parameter exists in MongoDB.
     The document saved in MongoDB is a dictionary that consists of the following key/values:
     - "_id": ID of the RDF graph (string).
-    - "@graph": JSON-LD representation of the RDF graph (string).
+    - "@graph": JSON-LD representation of the RDF graph (dictionary).
     '''
+
+    logger.info("Checking if the RDF graph exists in MongoDB...")
 
     count = mongodb_collection.count_documents({"_id": graph_id})
     if count == 0:
@@ -119,13 +119,13 @@ def get_graph_from_mongodb(graph_id: str) -> Graph:
     MongoDB and which ID is passed as a parameter.
     The document saved in MongoDB is a dictionary that consists of the following key/values:
     - "_id": ID of the RDF graph (string).
-    - "@graph": JSON-LD representation of the RDF graph (string).
+    - "@graph": JSON-LD representation of the RDF graph (dictionary).
     '''
 
-    logger.info("Retrieving RDF graph from MongoDB...")
+    logger.info("Retrieving the RDF graph from MongoDB...")
 
     dict = list(mongodb_collection.find({"_id": graph_id}))[0]
-    graph = Graph().parse(data = dict["@graph"], format = "json-ld")
+    graph = Graph().parse(data = json.dumps(dict["@graph"]), format = "json-ld")
     return graph
 
 def write_graph_to_mongodb(graph_id: str, graph: Graph) -> None:
@@ -133,16 +133,16 @@ def write_graph_to_mongodb(graph_id: str, graph: Graph) -> None:
     Serializes the RDF graph object to JSON-LD format and saves it into MongoDB.
     The document saved in MongoDB is a dictionary that consists of the following key/values:
     - "_id": ID of the RDF graph (string).
-    - "@graph": JSON-LD representation of the RDF graph (string).
+    - "@graph": JSON-LD representation of the RDF graph (dictionary).
     '''
 
-    logger.info("Serializing RDF graph to JSON-LD format and writing it to MongoDB...")
+    logger.info("Serializing the RDF graph to JSON-LD format and saving it in MongoDB...")
 
     json_ld = graph.serialize(format = "json-ld")
     dict = {}
     dict["_id"] = graph_id
-    dict["@graph"] = json_ld
-    mongodb_collection.replace_one({"_id": graph_id}, dict, True)
+    dict["@graph"] = json.loads(json_ld)
+    mongodb_collection.replace_one({"_id": graph_id}, dict, True) # Using upsert operation.
 
 ## -- END DEFINITION OF AUXILIARY FUNCTIONS -- ##
 
@@ -150,7 +150,7 @@ def write_graph_to_mongodb(graph_id: str, graph: Graph) -> None:
 
 class CreateDataProduct(BaseModel):
     id: str = Field(
-        description = "Unique identifer of the data product in the data catalog."
+        description = "Unique identifer of the data product in the Data Catalog."
     )
     name: str = Field(
         description = "Name of the data product."
@@ -200,13 +200,13 @@ async def lifespan(app: FastAPI):
 
     # -> CODE TO BE EXECUTED UPON STARTUP
     
-    # Check if RDF graph exists in MongoDB.
+    # Check if the RDF graph exists in MongoDB.
     # If it does not exist, it is created and saved in memory and in MongoDB.
     # Otherwise, it is retrieved from MongoDB and saved in memory.
     if check_if_graph_exists_in_mongodb(graph_id = CORE_GRAPH_ID) == False:
-        logger.info("RDF graph does not exist in MongoDB. Creating it...")
+        logger.info("The RDF graph does not exist in MongoDB. Creating it...")
 
-        # Create RDF core_graph and bind it to namespaces:
+        # Create RDF graph (core_graph) and bind it to namespaces:
         core_graph = Graph()
         core_graph.bind("aerdcat", AERDCAT)
         core_graph.bind("aeros", AEROS)
@@ -232,19 +232,19 @@ async def lifespan(app: FastAPI):
 
         logger.info("RDF graph created.")
 
-        # Sending RDF data to serializer for NGSI-LD translation:
+        # Send RDF data to serializer for NGSI-LD translation:
         entities = serializer(core_graph)
         debug = False
         if LOGLEVEL == "DEBUG":
             debug = True
         send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
 
-        # RDF core_graph is saved in MongoDB:
+        # The RDF graph is saved in MongoDB:
         write_graph_to_mongodb(graph_id = CORE_GRAPH_ID, graph = core_graph)
         logger.info("RDF graph saved in MongoDB.")
     else:
-        # RDF core_graph is retrieved from MongoDB and saved in memory:
-        logger.info("RDF graph exists in MongoDB.")
+        # The RDF graph is retrieved from MongoDB and saved in memory (core_graph):
+        logger.info("The RDF graph exists in MongoDB.")
         core_graph = get_graph_from_mongodb(graph_id = CORE_GRAPH_ID)
         logger.info("RDF graph retrieved from MongoDB.")
 
@@ -254,9 +254,9 @@ async def lifespan(app: FastAPI):
 
     # -> CODE TO BE EXECUTED UPON SHUTDOWN
 
-    # Upon shutdown, RDF core_graph is always saved in MongoDB.
+    # Upon shutdown, the RDF graph (core_graph) is always saved in MongoDB.
     write_graph_to_mongodb(graph_id = CORE_GRAPH_ID, graph = core_graph)
-    logger.info("Graph saved in MongoDB.")
+    logger.info("RDF graph saved in MongoDB.")
 
     # <- CODE TO BE EXECUTED UPON SHUTDOWN
 
@@ -292,7 +292,6 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
         raise HTTPException(
             status_code = 409, detail = "Data product already exists."
         )
-    
     g.add((dp, RDF.type, AERDCAT.DataProduct))
     g.add((dp, DCTERMS.identifier, Literal(create_dp.id)))
     g.add((dp, DCTERMS.title, Literal(create_dp.name)))
@@ -360,7 +359,7 @@ async def register_data_product(create_dp: CreateDataProduct = Body(...)) -> str
         debug = True
     send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
 
-    # RDF core_graph is saved in MongoDB:
+    # The RDF graph (core_graph) is saved in MongoDB:
     write_graph_to_mongodb(graph_id = CORE_GRAPH_ID, graph = core_graph)
     logger.info("RDF graph saved in MongoDB.")
     
@@ -404,8 +403,8 @@ async def delete_data_product(dp_id: str):
         INTERNAL_CONTEXT_BROKER_URL + "/entities/" + distribution
     )
     
-    # "servesDataProduct" and "dataProduct" relationships must be deleted
-    # in the in-memory RDF graph, and NGSI-LD entities must be updated:
+    # "servesDataProduct" and "dataProduct" relationships are deleted
+    # in the in-memory RDF graph, and NGSI-LD entities are updated:
     g.remove((cb, AERDCAT.servesDataProduct, dp))
     g.remove((catalog, AERDCAT.dataProduct, dp))
 
@@ -419,7 +418,7 @@ async def delete_data_product(dp_id: str):
     if subject_has_no_relationship(g, cb, AERDCAT.servesDataProduct):
         local_graph.add((cb, AERDCAT.servesDataProduct, URIRef("urn:ngsi-ld:null")))
         local_graph.add((catalog, AERDCAT.dataProduct, URIRef("urn:ngsi-ld:null")))
-        # Send:
+        # Send RDF data to serializer for NGSI-LD translation:
         entities = serializer(
             local_graph,
             [
@@ -428,7 +427,7 @@ async def delete_data_product(dp_id: str):
             ]
         )
     else:
-        # Sending RDF data to serializer for NGSI-LD translation:
+        # Send RDF data to serializer for NGSI-LD translation:
         entities = serializer(
             local_graph,
             [
@@ -443,8 +442,8 @@ async def delete_data_product(dp_id: str):
         debug = True
     send_to_context_broker(entities, INTERNAL_CONTEXT_BROKER_URL, debug)
 
-    # RDF core_graph is saved in MongoDB:
+    # The RDF graph (core_graph) is saved in MongoDB:
     write_graph_to_mongodb(graph_id = CORE_GRAPH_ID, graph = core_graph)
-    logger.info("Graph saved in MongoDB.")
+    logger.info("RDF graph saved in MongoDB.")
 
 ## -- END MAIN CODE -- ##
