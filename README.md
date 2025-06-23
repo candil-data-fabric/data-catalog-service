@@ -32,7 +32,6 @@ Or use the DEV docker-compose file to test the service a development scenario:
 docker compose -f docker-compose-dev.yaml up -d
 ```
 
-
 Sample request:
 
 ```bash

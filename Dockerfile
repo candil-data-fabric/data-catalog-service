@@ -3,8 +3,8 @@
 FROM python:3.11-slim AS builder
 
 # Some labels are defined to store metadata.
-LABEL image_version="1.3.1"
-LABEL app_version="1.3.1"
+LABEL image_version="1.4.0"
+LABEL app_version="1.4.0"
 LABEL maintainer="Ignacio Domínguez Martínez-Casanueva"
 
 # Kudos to https://github.com/gianfa/poetry/blob/docs/docker-best-practices/docker-examples/poetry-multistage/Dockerfile
