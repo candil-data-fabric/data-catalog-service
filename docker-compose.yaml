@@ -7,9 +7,10 @@ services:
     environment:
       INTERNAL_CONTEXT_BROKER_URL: "http://orion:1026/ngsi-ld/v1"
       PUBLIC_CONTEXT_BROKER_URL: "http://api-gw:1026/ngsi-ld/v1"
-      DOMAIN_ID: "NCSRD"
-      ORGANIZATION_ID: "NCSRD"
-      LOGLEVEL: "INFO"
+      DOMAIN_ID: "CANDIL"
+      ORGANIZATION_ID: "CANDIL"
+      LOGLEVEL: "DEBUG"
+      MONGO_DB_URI: "mongodb://mongo:27017"
     ports:
       - "8000:80"
     depends_on:
@@ -29,4 +30,3 @@ services:
     restart: always
 volumes:
   mongo-orion-domain:
-
